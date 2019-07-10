@@ -1,0 +1,6 @@
+{
+  "Name": "Mother Fuck",
+  "Host": "127.0.0.1",
+  "TcpPort": 2727,
+  "MaxConn": 3
+}
