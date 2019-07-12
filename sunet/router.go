@@ -1,4 +1,4 @@
-package net
+package sunet
 
 import "github.com/ilovesusu/Supreme/suinterface"
 

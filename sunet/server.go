@@ -1,4 +1,4 @@
-package net
+package sunet
 
 import (
 	"fmt"
@@ -9,11 +9,11 @@ import (
 )
 
 type Serve struct {
-	Name      string              //服务器名称
-	IPVersion string              //服务器IP版本
-	IP        string              //服务器IP
-	Port      int                 //服务器端口
-	Router    suinterface.IRouter //路由
+	Name      string                 //服务器名称
+	IPVersion string                 //服务器IP版本
+	IP        string                 //服务器IP
+	Port      int                    //服务器端口
+	MsgHandle suinterface.IMsgHandle //消息处理模块  msgid 与 router 的绑定
 }
 
 //启动服务器
@@ -40,11 +40,10 @@ func (s *Serve) Start() {
 	//监听成功
 	fmt.Println("start server  ", s.Name, " success, now listenning...")
 	//3 启动server网络连接业务
+	//TODO server.go 应该有一个自动生成用户ID的方法
+	var cid uint32
+	cid = 1
 	for {
-		//TODO server.go 应该有一个自动生成ID的方法
-		var cid uint32
-		cid = 0
-
 		//3.1 阻塞等待客户端建立连接请求
 		conn, err := listenner.AcceptTCP()
 		if err != nil {
@@ -54,7 +53,7 @@ func (s *Serve) Start() {
 		//3.2 TODO Server.Start() 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
 
 		//3.3 处理该新连接请求的 业务 方法， 此时 handler 和 conn是绑定的
-		connection := NewConnection(conn, cid, s.Router)
+		connection := NewConnection(conn, cid, s.MsgHandle)
 		cid++
 
 		//启动当前的链接业务处理
@@ -78,8 +77,9 @@ func (s *Serve) Serve() {
 	}
 }
 
-func (s *Serve) AddRouter(router suinterface.IRouter) {
-	s.Router = router
+//添加路由绑定
+func (s *Serve) AddRouter(msgid uint32, router suinterface.IRouter) {
+	s.MsgHandle.AddRouter(msgid, router)
 }
 
 /*
@@ -95,7 +95,7 @@ func NewServer(name string) (serve suinterface.IServer) {
 		IPVersion: "tcp4",
 		IP:        utils.GlobalObject.Host,    //从全局参数获取
 		Port:      utils.GlobalObject.TcpPort, //从全局参数获取
-		Router:    nil,
+		MsgHandle: NewMsgHandle(),
 	}
 	return s
 }
