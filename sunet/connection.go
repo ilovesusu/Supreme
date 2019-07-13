@@ -15,8 +15,9 @@ type Connection struct {
 	Conn         *net.TCPConn           // Conn 的 socket
 	ConnID       uint32                 // Conn 的 ID
 	IsClose      bool                   // Conn的状态
-	ExitBuffChan chan bool              //告知conn已经关闭退出
-	MsgHandle    suinterface.IMsgHandle //Conn 的处理方法Router
+	ExitBuffChan chan bool              // 告知conn已经关闭退出
+	MsgHandle    suinterface.IMsgHandle // Conn 的处理方法Router
+	msgChan      chan []byte            // 无缓冲管道，用于读、写两个goroutine之间的消息通信
 }
 
 //初始化连接模块的函数
@@ -28,15 +29,16 @@ func NewConnection(conn *net.TCPConn, connID uint32, msgHandle suinterface.IMsgH
 		IsClose:      false,
 		MsgHandle:    msgHandle,
 		ExitBuffChan: make(chan bool),
+		msgChan:      make(chan []byte),
 	}
 	return c
 }
 
 // 启动连接
 func (c *Connection) Start() {
-	//1 开启用于写回客户端数据流程的Goroutine
-	//go c.StartWriter()
-	//2 开启用户从客户端读取数据流程的Goroutine
+	//1 开启用于写回客户端数据流程的 Goroutine
+	go c.StartWriter()
+	//2 开启用户从客户端读取数据流程的 Goroutine
 	go c.StartReader()
 }
 
@@ -82,12 +84,8 @@ func (c *Connection) SendMsg(msgId uint32, data []byte) error {
 		return errors.New("Pack error msg ")
 	}
 
-	//写回客户端
-	if _, err := c.Conn.Write(msg); err != nil {
-		fmt.Println("Write msg id ", msgId, " error ")
-		c.ExitBuffChan <- true
-		return errors.New("conn Write error")
-	}
+	//写入消息管道,由写 Goroutine 发送到客户端
+	c.msgChan <- msg
 
 	return nil
 }
@@ -136,5 +134,21 @@ func (c *Connection) StartReader() {
 }
 
 func (c *Connection) StartWriter() {
+	fmt.Println("Writer Goroutine is  running")
+	defer fmt.Println(c.GetRemoteAddr().String(), " conn Writer exit!")
 
+	for {
+		select {
+		case data := <-c.msgChan:
+			//有数据要写给客户端
+			if _, err := c.Conn.Write(data); err != nil {
+				fmt.Println("Send Data error:, ", err, " Conn Writer exit")
+				c.ExitBuffChan <- true
+				return
+			}
+		case <-c.ExitBuffChan:
+			//conn已经关闭
+			return
+		}
+	}
 }
